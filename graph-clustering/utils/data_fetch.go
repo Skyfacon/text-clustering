@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"graph-clustering/model"
 	"os"
 )
 
@@ -73,16 +74,23 @@ func (h *DataHandler) read(filePath string) {
 }
 
 // Start 可以传入一个function，来处理h.drainer通道的内容
-func (h *DataHandler) Start() error {
+func (h *DataHandler) Start(cache chan *model.Document, done chan struct{}) error {
 	go h.read(h.filePath)
 	for {
 		select {
 		case data := <-h.drainer:
-			fmt.Printf("%v\n", data)
+			cache <- &model.Document{
+				Title:    data.Title,
+				DocNum:   data.DocNum,
+				Segments: data.SegList,
+			}
 		case err := <-h.err:
 			fmt.Printf("%v\n", err)
+			h.Stop()
 			return err
 		case <-h.done:
+			done <- struct{}{}
+			h.Stop()
 			return nil
 		}
 	}

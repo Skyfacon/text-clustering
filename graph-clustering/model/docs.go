@@ -1,4 +1,4 @@
-package bestmatch25plus
+package model
 
 type Document struct {
 	Title    string   `json:"title"`
@@ -8,4 +8,9 @@ type Document struct {
 
 func (d *Document) SegLength() int {
 	return len(d.Segments)
+}
+
+type DocWithSim struct {
+	Similarity float64
+	DocId      int
 }

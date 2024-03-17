@@ -22,7 +22,7 @@ func TestDataHandler_Start(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := NewDataHandler(tt.fields.filePath)
-			if err := h.Start(); (err != nil) != tt.wantErr {
+			if err := h.Start(nil, nil); (err != nil) != tt.wantErr {
 				t.Errorf("Start() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
