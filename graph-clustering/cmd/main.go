@@ -21,8 +21,9 @@ func main() {
 	go dataFetcher.Start(bm25plus.GetCacheChannel(), bm25plus.GetDoneChannel())
 	bm25plus.Build()
 
+	fmt.Printf("Starting Search")
 	res := make([]*R, 0)
-	for i := 0; i < bm25plus.GetDocNum(); i++ {
+	for i := 0; i < 100; i++ {
 		doc := bm25plus.GetDocByDocId(i)
 		r := bm25plus.Search(doc, 100)
 
@@ -40,7 +41,7 @@ func main() {
 		return false
 	})
 
-	for _, doc := range res[:100] {
+	for _, doc := range res {
 		fmt.Printf(doc.title + "\n")
 		bm25plus.Show(doc.docs)
 		fmt.Printf("-------------------------\n")

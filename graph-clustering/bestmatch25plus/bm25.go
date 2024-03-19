@@ -34,6 +34,10 @@ type BestMatch25Plus struct {
 
 func NewBm25PlusEngine() *BestMatch25Plus {
 	return &BestMatch25Plus{
+		k1:    1.2,
+		b:     0.75,
+		delta: 1.0,
+
 		cache:      make(chan *model.Document, MAX_CACHE_SIZE),
 		done:       make(chan struct{}),
 		docs:       make([]*model.Document, 0),
@@ -59,6 +63,7 @@ func (bm *BestMatch25Plus) Build() {
 }
 
 func (bm *BestMatch25Plus) Receive(doc *model.Document) {
+	//fmt.Printf("receive: %v\n", doc)
 	bm.docs = append(bm.docs, doc)
 
 	wordMap := make(map[string]int)
@@ -76,10 +81,10 @@ func (bm *BestMatch25Plus) Receive(doc *model.Document) {
 	bm.docNum += 1
 }
 
-// IdfCalc idf = log(N + 0.5) - log(n + 0.5)
+// IdfCalc idf = log(N + 1) - log(n + 0.5), here N + 1 to avoid negative value
 func (bm *BestMatch25Plus) IdfCalc() {
 	for k, v := range bm.df {
-		bm.idf[k] = math.Log(float64(bm.docNum)+0.5) - math.Log(float64(v)+0.5)
+		bm.idf[k] = math.Log(float64(bm.docNum)+1) - math.Log(float64(v)+0.5)
 	}
 }
 
@@ -89,7 +94,7 @@ func (bm *BestMatch25Plus) avgTermCntCalc() {
 
 func (bm *BestMatch25Plus) addTerm(term string) {
 	if docIdList, ok := bm.term2docId[term]; ok {
-		docIdList = append(docIdList, bm.docNum)
+		bm.term2docId[term] = append(docIdList, bm.docNum)
 		return
 	}
 	bm.term2docId[term] = []int{bm.docNum}
@@ -103,9 +108,9 @@ func (bm *BestMatch25Plus) ScoreCalc(doc *model.Document, idx int) float64 {
 		}
 		d := float64(bm.docs[idx].SegLength())
 		iwf := float64(bm.wf[idx][word])
-		molecular := bm.delta + iwf*(bm.k1+1)
+		molecular := iwf * (bm.k1 + 1)
 		denominator := iwf + bm.k1*(1-bm.b+bm.b*d/bm.avgTermCnt)
-		score += bm.idf[word] * molecular / denominator
+		score += bm.idf[word] * (molecular/denominator + bm.delta)
 	}
 	return score
 }
@@ -133,7 +138,7 @@ func (bm *BestMatch25Plus) Search(doc *model.Document, topK int) []*model.DocWit
 		return false
 	})
 
-	res2 := res
+	res2 := NormalizeAndTruncate(res)
 
 	if topK >= len(res2) {
 		return res2
@@ -157,24 +162,6 @@ func NormalizeAndTruncate(docs []*model.DocWithSim) []*model.DocWithSim {
 		}
 	}
 	return res
-}
-
-func dictFunc(words []string) {
-	dict := make(map[string]int)
-	for _, word := range words {
-		dict[word] += 1
-	}
-	for k, v := range dict {
-		fmt.Printf("k:%s, v:%d\n", k, v)
-	}
-}
-
-func (bm *BestMatch25Plus) Show(docs []*model.DocWithSim) {
-	for _, doc := range docs {
-		title := bm.docs[doc.DocId].Title
-		score := doc.Similarity
-		fmt.Printf("%s, %.2f\n", title, score)
-	}
 }
 
 func (bm *BestMatch25Plus) GetCacheChannel() chan *model.Document {

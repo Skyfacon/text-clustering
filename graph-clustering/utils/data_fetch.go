@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"graph-clustering/model"
 	"os"
+	"time"
 )
 
 const (
@@ -70,7 +71,18 @@ func (h *DataHandler) read(filePath string) {
 		}
 		h.drainer <- &data
 	}
-	h.done <- struct{}{}
+
+	cnt := 0
+	for {
+		if len(h.drainer) == 0 {
+			h.done <- struct{}{}
+			return
+		}
+		time.Sleep(1 * time.Second)
+		cnt++
+		fmt.Printf("wait %ds\n", cnt)
+	}
+
 }
 
 // Start 可以传入一个function，来处理h.drainer通道的内容
