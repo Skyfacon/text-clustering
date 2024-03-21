@@ -22,14 +22,16 @@ type BestMatch25Plus struct {
 	delta float64
 
 	docNum int
-	docs   []*model.Document
+	docs   []*model.Document // 仅包含unique title的doc
 
 	idf        map[string]float64 // 每个词的idf值
 	df         map[string]int     // 每个词出现该词的文档数量
 	wf         []map[string]int   // 文档i里某个词出现的次数
 	term2docId map[string][]int   // 某个词对应的包含该词的文档id列表
 	totalTerms int                // 所有的文档包含的term的总数
-	avgTermCnt float64
+	avgTermCnt float64            // 每篇文档的平均切词数量
+
+	uniqueTitleMap map[string]int
 }
 
 func NewBm25PlusEngine() *BestMatch25Plus {
@@ -45,6 +47,8 @@ func NewBm25PlusEngine() *BestMatch25Plus {
 		df:         make(map[string]int),
 		wf:         make([]map[string]int, 0),
 		term2docId: make(map[string][]int),
+
+		uniqueTitleMap: make(map[string]int),
 	}
 }
 
@@ -63,8 +67,13 @@ func (bm *BestMatch25Plus) Build() {
 }
 
 func (bm *BestMatch25Plus) Receive(doc *model.Document) {
-	//fmt.Printf("receive: %v\n", doc)
+	if idx, ok := bm.uniqueTitleMap[doc.Title]; ok {
+		bm.docs[idx].IdsForIdenticalDoc = append(bm.docs[idx].IdsForIdenticalDoc, doc.DocNum)
+		return
+	}
+
 	bm.docs = append(bm.docs, doc)
+	bm.uniqueTitleMap[doc.Title] = bm.docNum
 
 	wordMap := make(map[string]int)
 	for _, word := range doc.Segments {

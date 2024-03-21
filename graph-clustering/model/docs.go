@@ -1,9 +1,10 @@
 package model
 
 type Document struct {
-	Title    string   `json:"title"`
-	DocNum   string   `json:"docno"`
-	Segments []string `json:"seg"`
+	Title              string   `json:"title"`
+	DocNum             string   `json:"docno"`
+	Segments           []string `json:"seg"`
+	IdsForIdenticalDoc []string `json:"ids"`
 }
 
 func (d *Document) SegLength() int {

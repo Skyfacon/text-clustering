@@ -23,7 +23,8 @@ func (bm *BestMatch25Plus) Show(docs []*model.DocWithSim) {
 		title := bm.docs[doc.DocId].Title
 		score := doc.Similarity
 		segs := bm.docs[doc.DocId].Segments
-		fmt.Printf("%s, %.2f,%v\n", title, score, segs)
+		idCnt := len(bm.docs[doc.DocId].IdsForIdenticalDoc) + 1
+		fmt.Printf("%s,%.2f,%d,%v\n", title, score, idCnt, segs)
 	}
 }
 
