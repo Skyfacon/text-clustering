@@ -21,8 +21,9 @@ type BestMatch25Plus struct {
 	b     float64
 	delta float64
 
-	docNum int
-	docs   []*model.Document // 仅包含unique title的doc
+	docNum        int
+	Docs          []*model.Document // 仅包含unique title的doc
+	DocsForSearch []*model.Document // 对需要进行检索的 doc添加了一些限制，如分词数量>=3等，保证信息的完整
 
 	idf        map[string]float64 // 每个词的idf值
 	df         map[string]int     // 每个词出现该词的文档数量
@@ -31,7 +32,8 @@ type BestMatch25Plus struct {
 	totalTerms int                // 所有的文档包含的term的总数
 	avgTermCnt float64            // 每篇文档的平均切词数量
 
-	uniqueTitleMap map[string]int
+	uniqueTitleMap  map[string]int
+	docNum2docIdMap map[string]int
 }
 
 func NewBm25PlusEngine() *BestMatch25Plus {
@@ -40,15 +42,17 @@ func NewBm25PlusEngine() *BestMatch25Plus {
 		b:     0.75,
 		delta: 1.0,
 
-		cache:      make(chan *model.Document, MAX_CACHE_SIZE),
-		done:       make(chan struct{}),
-		docs:       make([]*model.Document, 0),
-		idf:        make(map[string]float64),
-		df:         make(map[string]int),
-		wf:         make([]map[string]int, 0),
-		term2docId: make(map[string][]int),
+		cache:         make(chan *model.Document, MAX_CACHE_SIZE),
+		done:          make(chan struct{}),
+		Docs:          make([]*model.Document, 0),
+		DocsForSearch: make([]*model.Document, 0),
+		idf:           make(map[string]float64),
+		df:            make(map[string]int),
+		wf:            make([]map[string]int, 0),
+		term2docId:    make(map[string][]int),
 
-		uniqueTitleMap: make(map[string]int),
+		uniqueTitleMap:  make(map[string]int),
+		docNum2docIdMap: make(map[string]int),
 	}
 }
 
@@ -68,12 +72,19 @@ func (bm *BestMatch25Plus) Build() {
 
 func (bm *BestMatch25Plus) Receive(doc *model.Document) {
 	if idx, ok := bm.uniqueTitleMap[doc.Title]; ok {
-		bm.docs[idx].IdsForIdenticalDoc = append(bm.docs[idx].IdsForIdenticalDoc, doc.DocNum)
+		bm.Docs[idx].IdsForIdenticalDoc = append(bm.Docs[idx].IdsForIdenticalDoc, doc.DocNum)
+		bm.docNum2docIdMap[doc.DocNum] = idx
 		return
 	}
 
-	bm.docs = append(bm.docs, doc)
+	bm.Docs = append(bm.Docs, doc)
 	bm.uniqueTitleMap[doc.Title] = bm.docNum
+	bm.docNum2docIdMap[doc.DocNum] = bm.docNum
+
+	// TODO 需要搜索的文档的过滤逻辑，只做清洗数据之用，后续对于一般文本，可以移除
+	if len(doc.Segments) >= 3 {
+		bm.DocsForSearch = append(bm.DocsForSearch, doc)
+	}
 
 	wordMap := make(map[string]int)
 	for _, word := range doc.Segments {
@@ -115,7 +126,7 @@ func (bm *BestMatch25Plus) ScoreCalc(doc *model.Document, idx int) float64 {
 		if _, ok := bm.wf[idx][word]; !ok {
 			continue
 		}
-		d := float64(bm.docs[idx].SegLength())
+		d := float64(bm.Docs[idx].SegLength())
 		iwf := float64(bm.wf[idx][word])
 		molecular := iwf * (bm.k1 + 1)
 		denominator := iwf + bm.k1*(1-bm.b+bm.b*d/bm.avgTermCnt)
@@ -124,7 +135,7 @@ func (bm *BestMatch25Plus) ScoreCalc(doc *model.Document, idx int) float64 {
 	return score
 }
 
-func (bm *BestMatch25Plus) Search(doc *model.Document, topK int) []*model.DocWithSim {
+func (bm *BestMatch25Plus) SearchTopK(doc *model.Document, topK int) *model.DocSimWrapper {
 	searched := make(map[int]bool)
 	res := make([]*model.DocWithSim, 0)
 	for _, term := range doc.Segments {
@@ -150,9 +161,22 @@ func (bm *BestMatch25Plus) Search(doc *model.Document, topK int) []*model.DocWit
 	res2 := NormalizeAndTruncate(res)
 
 	if topK >= len(res2) {
-		return res2
+		return &model.DocSimWrapper{
+			DocId: bm.docNum2docIdMap[doc.DocNum],
+			Title: doc.Title,
+			Docs:  res2,
+		}
 	}
-	return res2[:topK]
+	return &model.DocSimWrapper{
+		DocId: bm.docNum2docIdMap[doc.DocNum],
+		Title: doc.Title,
+		Docs:  res2[:topK],
+	}
+}
+
+func (bm *BestMatch25Plus) Search(doc *model.Document) *model.DocSimWrapper {
+	topK := 100
+	return bm.SearchTopK(doc, topK)
 }
 
 func NormalizeAndTruncate(docs []*model.DocWithSim) []*model.DocWithSim {
@@ -182,7 +206,7 @@ func (bm *BestMatch25Plus) GetDoneChannel() chan struct{} {
 }
 
 func (bm *BestMatch25Plus) GetDocByDocId(docId int) *model.Document {
-	return bm.docs[docId]
+	return bm.Docs[docId]
 }
 
 func (bm *BestMatch25Plus) GetDocNum() int {

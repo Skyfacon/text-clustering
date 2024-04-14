@@ -18,19 +18,29 @@ func dictFunc(words []string) {
 	}
 }
 
-func (bm *BestMatch25Plus) Show(docs []*model.DocWithSim) {
+func (bm *BestMatch25Plus) ShowDocSim(docs []*model.DocWithSim) {
 	for _, doc := range docs {
-		title := bm.docs[doc.DocId].Title
+		title := bm.Docs[doc.DocId].Title
 		score := doc.Similarity
-		segs := bm.docs[doc.DocId].Segments
-		idCnt := len(bm.docs[doc.DocId].IdsForIdenticalDoc) + 1
+		segs := bm.Docs[doc.DocId].Segments
+		idCnt := len(bm.Docs[doc.DocId].IdsForIdenticalDoc) + 1
 		fmt.Printf("%s,%.2f,%d,%v\n", title, score, idCnt, segs)
 	}
 }
 
+func (bm *BestMatch25Plus) Show(docSearchResult *model.DocSimWrapper) {
+	fmt.Printf(docSearchResult.Title + "\n")
+	for _, doc := range docSearchResult.Docs {
+		title := bm.Docs[doc.DocId].Title
+		score := doc.Similarity
+		idCnt := len(bm.Docs[doc.DocId].IdsForIdenticalDoc) + 1
+		fmt.Printf("%s,%.2f,%d\n", title, score, idCnt)
+	}
+}
+
 func (bm *BestMatch25Plus) ShowStructure() {
-	fmt.Println("docs:")
-	for _, doc := range bm.docs {
+	fmt.Println("Docs:")
+	for _, doc := range bm.Docs {
 		fmt.Printf(doc.Title + "---" + strings.Join(doc.Segments, "|") + "\n")
 	}
 

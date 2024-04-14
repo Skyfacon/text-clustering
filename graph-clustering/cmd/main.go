@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"graph-clustering/batchprocess"
 	"graph-clustering/bestmatch25plus"
 	"graph-clustering/model"
 	"graph-clustering/utils"
@@ -15,36 +16,29 @@ type R struct {
 }
 
 func main() {
-	fileAddr := "../data/sougouCA_seg_simple.txt"
+	fileAddr := "../data/sougouCA_clean_simple.txt"
 	dataFetcher := utils.NewDataHandler(fileAddr)
 	bm25plus := bestmatch25plus.NewBm25PlusEngine()
 	go dataFetcher.Start(bm25plus.GetCacheChannel(), bm25plus.GetDoneChannel())
 	bm25plus.Build()
 
-	fmt.Printf("Starting Search")
-	res := make([]*R, 0)
-	for i := 0; i < 100; i++ {
-		doc := bm25plus.GetDocByDocId(i)
-		r := bm25plus.Search(doc, 100)
+	fmt.Println("Starting BatchProcessing")
+	// TODO Search的时候，为避免过短的搜索项，考虑只搜索有用分词个数 >= 3个的
+	fmt.Printf("Totally %d docs will be processed\n", len(bm25plus.DocsForSearch))
+	batchProcessor := batchprocess.NewBatchProcessor[*model.Document, *model.DocSimWrapper](bm25plus.DocsForSearch, 30)
+	batchProcessor.Process(bm25plus.Search)
+	res := batchProcessor.GetProcessResult()
 
-		res = append(res, &R{
-			title:  doc.Title,
-			docs:   r,
-			docNum: len(r),
-		})
-	}
-
+	fmt.Println("Start Sort and Show")
 	sort.Slice(res, func(i, j int) bool {
-		if res[i].docNum > res[j].docNum {
+		if len(res[i].Docs) > len(res[j].Docs) {
 			return true
 		}
 		return false
 	})
 
-	for _, doc := range res {
-		fmt.Printf(doc.title + "\n")
-		bm25plus.Show(doc.docs)
-		fmt.Printf("-------------------------\n")
+	for _, docSearchRes := range res[:100] {
+		bm25plus.Show(docSearchRes)
 	}
 
 }
